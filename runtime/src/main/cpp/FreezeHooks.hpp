@@ -7,11 +7,14 @@
 #define RUNTIME_MM_FREEZE_HOOKS_H
 
 struct ObjHeader;
+struct TypeInfo;
 
 namespace kotlin {
 
 // These hooks are only allowed to modify `object` subgraph.
 void RunFreezeHooks(ObjHeader* object) noexcept;
+
+void SetFreezeHookForTesting(void (*hook)(ObjHeader*)) noexcept;
 
 } // namespace kotlin
 
