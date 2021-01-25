@@ -16,7 +16,7 @@ using namespace kotlin;
 
 namespace {
 
-struct HasFreezeHook {
+struct WithFreezeHook {
     static constexpr bool hasFreezeHook = true;
 };
 
@@ -100,30 +100,93 @@ private:
     FreezeHooksTestSupport freezeHooks_;
 };
 
+class TypesNames {
+public:
+    template <typename T>
+    static std::string GetName(int i) {
+        switch (i) {
+            case 0: return "object";
+            case 1: return "array";
+            default: return "unknown";
+        }
+    }
+};
+
+template <typename T>
+class FreezingEmptyNoHookTest : public FreezingTest {};
+using EmptyNoHookTypes = testing::Types<Object<0, NoFreezeHook>, Array<0, NoFreezeHook>>;
+TYPED_TEST_SUITE(FreezingEmptyNoHookTest, EmptyNoHookTypes, TypesNames);
+
+template <typename T>
+class FreezingEmptyWithHookTest : public FreezingTest {};
+using EmptyWithHookTypes = testing::Types<Object<0, WithFreezeHook>, Array<0, WithFreezeHook>>;
+TYPED_TEST_SUITE(FreezingEmptyWithHookTest, EmptyWithHookTypes, TypesNames);
+
+template <typename T>
+class FreezingNoHookTest : public FreezingTest {};
+using NoHookTypes = testing::Types<Object<3, NoFreezeHook>, Array<3, NoFreezeHook>>;
+TYPED_TEST_SUITE(FreezingNoHookTest, NoHookTypes, TypesNames);
+
+template <typename T>
+class FreezingWithHookTest : public FreezingTest {};
+using WithHookTypes = testing::Types<Object<3, WithFreezeHook>, Array<3, WithFreezeHook>>;
+TYPED_TEST_SUITE(FreezingWithHookTest, WithHookTypes, TypesNames);
+
 } // namespace
 
-TEST_F(FreezingTest, EmptyObjectNoHook) {
-    Object<0> object;
-    mm::FreezeSubgraph(object.header());
+TYPED_TEST(FreezingEmptyNoHookTest, UnfrozenByDefault) {
+    TypeParam object;
+    EXPECT_FALSE(mm::IsFrozen(object.header()));
+}
+
+TYPED_TEST(FreezingEmptyNoHookTest, FailToEnsureNeverFrozen) {
+    TypeParam object;
+    ASSERT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    ASSERT_TRUE(mm::IsFrozen(object.header()));
+    EXPECT_FALSE(mm::EnsureNeverFrozen(object.header()));
+}
+
+TYPED_TEST(FreezingEmptyNoHookTest, Freeze) {
+    TypeParam object;
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
     EXPECT_TRUE(mm::IsFrozen(object.header()));
 }
 
-TEST_F(FreezingTest, EmptyObjectWithHook) {
-    Object<0, HasFreezeHook> object;
-    EXPECT_CALL(freezeHook(), Call(object.header()));
-    mm::FreezeSubgraph(object.header());
+TYPED_TEST(FreezingEmptyNoHookTest, FreezeTwice) {
+    TypeParam object;
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
     EXPECT_TRUE(mm::IsFrozen(object.header()));
 }
 
-TEST_F(FreezingTest, EmptyArrayNoHook) {
-    Array<0> array;
-    mm::FreezeSubgraph(array.header());
-    EXPECT_TRUE(mm::IsFrozen(array.header()));
+TYPED_TEST(FreezingEmptyNoHookTest, FreezeForbidden) {
+    TypeParam object;
+    ASSERT_TRUE(mm::EnsureNeverFrozen(object.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), object.header());
+    EXPECT_FALSE(mm::IsFrozen(object.header()));
 }
 
-TEST_F(FreezingTest, EmptyArrayWithHook) {
-    Array<0, HasFreezeHook> array;
-    EXPECT_CALL(freezeHook(), Call(array.header()));
-    mm::FreezeSubgraph(array.header());
-    EXPECT_TRUE(mm::IsFrozen(array.header()));
+TYPED_TEST(FreezingEmptyWithHookTest, Freeze) {
+    TypeParam object;
+    EXPECT_CALL(this->freezeHook(), Call(object.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_TRUE(mm::IsFrozen(object.header()));
+}
+
+TYPED_TEST(FreezingEmptyWithHookTest, FreezeTwice) {
+    TypeParam object;
+    // Only called for the first freeze.
+    EXPECT_CALL(this->freezeHook(), Call(object.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    testing::Mock::VerifyAndClearExpectations(&this->freezeHook());
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_TRUE(mm::IsFrozen(object.header()));
+}
+
+TYPED_TEST(FreezingEmptyWithHookTest, FreezeForbidden) {
+    TypeParam object;
+    ASSERT_TRUE(mm::EnsureNeverFrozen(object.header()));
+    EXPECT_CALL(this->freezeHook(), Call(object.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), object.header());
+    EXPECT_FALSE(mm::IsFrozen(object.header()));
 }
