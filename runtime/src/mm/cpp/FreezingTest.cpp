@@ -39,10 +39,12 @@ public:
         if (Fields > 0) {
             auto* offsets = new int32_t[Fields];
             for (size_t i = 0; i < Fields; ++i) {
+                fields_[i] = nullptr;
                 offsets[i] = reinterpret_cast<uintptr_t>(&fields_[i]) - reinterpret_cast<uintptr_t>(&header_);
             }
             type->objOffsets_ = offsets;
         }
+        type->instanceSize_ = sizeof(*this);
         header_.typeInfoOrMeta_ = type;
     }
 
@@ -74,6 +76,10 @@ public:
         } else {
             type->flags_ &= ~TF_HAS_FREEZE_HOOK;
         }
+        for (size_t i = 0; i < Elements; ++i) {
+            elements_[i] = nullptr;
+        }
+        type->instanceSize_ = -static_cast<int32_t>(sizeof(ObjHeader*));
         header_.typeInfoOrMeta_ = type;
         header_.count_ = Elements;
     }
@@ -105,9 +111,12 @@ public:
     template <typename T>
     static std::string GetName(int i) {
         switch (i) {
-            case 0: return "object";
-            case 1: return "array";
-            default: return "unknown";
+            case 0:
+                return "object";
+            case 1:
+                return "array";
+            default:
+                return "unknown";
         }
     }
 };
@@ -189,4 +198,270 @@ TYPED_TEST(FreezingEmptyWithHookTest, FreezeForbidden) {
     EXPECT_CALL(this->freezeHook(), Call(object.header()));
     EXPECT_THAT(mm::FreezeSubgraph(object.header()), object.header());
     EXPECT_FALSE(mm::IsFrozen(object.header()));
+}
+
+TYPED_TEST(FreezingNoHookTest, Freeze) {
+    TypeParam object;
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_TRUE(mm::IsFrozen(object.header()));
+}
+
+TYPED_TEST(FreezingNoHookTest, FreezeTwice) {
+    TypeParam object;
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_TRUE(mm::IsFrozen(object.header()));
+}
+
+TYPED_TEST(FreezingNoHookTest, FreezeForbidden) {
+    TypeParam object;
+    ASSERT_TRUE(mm::EnsureNeverFrozen(object.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), object.header());
+    EXPECT_FALSE(mm::IsFrozen(object.header()));
+}
+
+TYPED_TEST(FreezingNoHookTest, FreezeTree) {
+    TypeParam object;
+    TypeParam field1;
+    TypeParam field2;
+    TypeParam field3;
+    object[0] = field1.header();
+    object[1] = field2.header();
+    object[2] = field3.header();
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_TRUE(mm::IsFrozen(object.header()));
+    EXPECT_TRUE(mm::IsFrozen(field1.header()));
+    EXPECT_TRUE(mm::IsFrozen(field2.header()));
+    EXPECT_TRUE(mm::IsFrozen(field3.header()));
+}
+
+TYPED_TEST(FreezingNoHookTest, FreezeTreeTwice) {
+    TypeParam object;
+    TypeParam field1;
+    TypeParam field2;
+    TypeParam field3;
+    object[0] = field1.header();
+    object[1] = field2.header();
+    object[2] = field3.header();
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_TRUE(mm::IsFrozen(object.header()));
+    EXPECT_TRUE(mm::IsFrozen(field1.header()));
+    EXPECT_TRUE(mm::IsFrozen(field2.header()));
+    EXPECT_TRUE(mm::IsFrozen(field3.header()));
+}
+
+TYPED_TEST(FreezingNoHookTest, FreezeTreeForbidden) {
+    TypeParam object;
+    TypeParam field1;
+    TypeParam field2;
+    TypeParam field3;
+    object[0] = field1.header();
+    object[1] = field2.header();
+    object[2] = field3.header();
+    ASSERT_TRUE(mm::EnsureNeverFrozen(object.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), object.header());
+    EXPECT_FALSE(mm::IsFrozen(object.header()));
+    EXPECT_FALSE(mm::IsFrozen(field1.header()));
+    EXPECT_FALSE(mm::IsFrozen(field2.header()));
+    EXPECT_FALSE(mm::IsFrozen(field3.header()));
+}
+
+TYPED_TEST(FreezingNoHookTest, FreezeTreeForbiddenByField) {
+    TypeParam object;
+    TypeParam field1;
+    TypeParam field2;
+    TypeParam field3;
+    object[0] = field1.header();
+    object[1] = field2.header();
+    object[2] = field3.header();
+    ASSERT_TRUE(mm::EnsureNeverFrozen(field2.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), field2.header());
+    EXPECT_FALSE(mm::IsFrozen(object.header()));
+    EXPECT_FALSE(mm::IsFrozen(field1.header()));
+    EXPECT_FALSE(mm::IsFrozen(field2.header()));
+    EXPECT_FALSE(mm::IsFrozen(field3.header()));
+}
+
+TYPED_TEST(FreezingNoHookTest, FreezeTreeRecursive) {
+    TypeParam object;
+    TypeParam inner1;
+    TypeParam inner2;
+    object[0] = inner1.header();
+    inner1[0] = inner2.header();
+    inner2[0] = object.header();
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_TRUE(mm::IsFrozen(object.header()));
+    EXPECT_TRUE(mm::IsFrozen(inner1.header()));
+    EXPECT_TRUE(mm::IsFrozen(inner2.header()));
+}
+
+TYPED_TEST(FreezingWithHookTest, Freeze) {
+    TypeParam object;
+    EXPECT_CALL(this->freezeHook(), Call(object.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_TRUE(mm::IsFrozen(object.header()));
+}
+
+TYPED_TEST(FreezingWithHookTest, FreezeTwice) {
+    TypeParam object;
+    // Only called for the first freeze.
+    EXPECT_CALL(this->freezeHook(), Call(object.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    testing::Mock::VerifyAndClearExpectations(&this->freezeHook());
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_TRUE(mm::IsFrozen(object.header()));
+}
+
+TYPED_TEST(FreezingWithHookTest, FreezeForbidden) {
+    TypeParam object;
+    ASSERT_TRUE(mm::EnsureNeverFrozen(object.header()));
+    EXPECT_CALL(this->freezeHook(), Call(object.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), object.header());
+    EXPECT_FALSE(mm::IsFrozen(object.header()));
+}
+
+TYPED_TEST(FreezingWithHookTest, FreezeTree) {
+    TypeParam object;
+    TypeParam field1;
+    TypeParam field2;
+    TypeParam field3;
+    object[0] = field1.header();
+    object[1] = field2.header();
+    object[2] = field3.header();
+    EXPECT_CALL(this->freezeHook(), Call(object.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field1.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field2.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field3.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_TRUE(mm::IsFrozen(object.header()));
+    EXPECT_TRUE(mm::IsFrozen(field1.header()));
+    EXPECT_TRUE(mm::IsFrozen(field2.header()));
+    EXPECT_TRUE(mm::IsFrozen(field3.header()));
+}
+
+TYPED_TEST(FreezingWithHookTest, FreezeTreeTwice) {
+    TypeParam object;
+    TypeParam field1;
+    TypeParam field2;
+    TypeParam field3;
+    object[0] = field1.header();
+    object[1] = field2.header();
+    object[2] = field3.header();
+    // Only called for the first freeze.
+    EXPECT_CALL(this->freezeHook(), Call(object.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field1.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field2.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field3.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    testing::Mock::VerifyAndClearExpectations(&this->freezeHook());
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_TRUE(mm::IsFrozen(object.header()));
+    EXPECT_TRUE(mm::IsFrozen(field1.header()));
+    EXPECT_TRUE(mm::IsFrozen(field2.header()));
+    EXPECT_TRUE(mm::IsFrozen(field3.header()));
+}
+
+TYPED_TEST(FreezingWithHookTest, FreezeTreeForbidden) {
+    TypeParam object;
+    TypeParam field1;
+    TypeParam field2;
+    TypeParam field3;
+    object[0] = field1.header();
+    object[1] = field2.header();
+    object[2] = field3.header();
+    ASSERT_TRUE(mm::EnsureNeverFrozen(object.header()));
+    EXPECT_CALL(this->freezeHook(), Call(object.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field1.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field2.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field3.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), object.header());
+    EXPECT_FALSE(mm::IsFrozen(object.header()));
+    EXPECT_FALSE(mm::IsFrozen(field1.header()));
+    EXPECT_FALSE(mm::IsFrozen(field2.header()));
+    EXPECT_FALSE(mm::IsFrozen(field3.header()));
+}
+
+TYPED_TEST(FreezingWithHookTest, FreezeTreeForbiddenByField) {
+    TypeParam object;
+    TypeParam field1;
+    TypeParam field2;
+    TypeParam field3;
+    object[0] = field1.header();
+    object[1] = field2.header();
+    object[2] = field3.header();
+    ASSERT_TRUE(mm::EnsureNeverFrozen(field2.header()));
+    EXPECT_CALL(this->freezeHook(), Call(object.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field1.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field2.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field3.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), field2.header());
+    EXPECT_FALSE(mm::IsFrozen(object.header()));
+    EXPECT_FALSE(mm::IsFrozen(field1.header()));
+    EXPECT_FALSE(mm::IsFrozen(field2.header()));
+    EXPECT_FALSE(mm::IsFrozen(field3.header()));
+}
+
+TYPED_TEST(FreezingWithHookTest, FreezeTreeRecursive) {
+    TypeParam object;
+    TypeParam inner1;
+    TypeParam inner2;
+    object[0] = inner1.header();
+    inner1[0] = inner2.header();
+    inner2[0] = object.header();
+    EXPECT_CALL(this->freezeHook(), Call(object.header()));
+    EXPECT_CALL(this->freezeHook(), Call(inner1.header()));
+    EXPECT_CALL(this->freezeHook(), Call(inner2.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_TRUE(mm::IsFrozen(object.header()));
+    EXPECT_TRUE(mm::IsFrozen(inner1.header()));
+    EXPECT_TRUE(mm::IsFrozen(inner2.header()));
+}
+
+TYPED_TEST(FreezingWithHookTest, FreezeTreeWithHookRewrite) {
+    TypeParam object;
+    TypeParam field1;
+    TypeParam field2;
+    TypeParam field3;
+    TypeParam oldInner;
+    TypeParam newInner;
+    object[0] = field1.header();
+    object[1] = field2.header();
+    object[2] = field3.header();
+    field2[0] = oldInner.header();
+    ON_CALL(this->freezeHook(), Call(field2.header())).WillByDefault([&field2, &newInner](ObjHeader* obj) {
+        field2[0] = newInner.header();
+    });
+    EXPECT_CALL(this->freezeHook(), Call(object.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field1.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field2.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field3.header()));
+    EXPECT_CALL(this->freezeHook(), Call(newInner.header()));
+    EXPECT_CALL(this->freezeHook(), Call(oldInner.header())).Times(0);
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), nullptr);
+    EXPECT_TRUE(mm::IsFrozen(object.header()));
+    EXPECT_TRUE(mm::IsFrozen(field1.header()));
+    EXPECT_TRUE(mm::IsFrozen(field2.header()));
+    EXPECT_TRUE(mm::IsFrozen(field3.header()));
+    EXPECT_TRUE(mm::IsFrozen(newInner.header()));
+    EXPECT_FALSE(mm::IsFrozen(oldInner.header()));
+}
+
+TYPED_TEST(FreezingWithHookTest, FreezeTreeForbiddenByHook) {
+    TypeParam object;
+    TypeParam field1;
+    TypeParam field2;
+    TypeParam field3;
+    object[0] = field1.header();
+    object[1] = field2.header();
+    object[2] = field3.header();
+    ON_CALL(this->freezeHook(), Call(field2.header())).WillByDefault([](ObjHeader* obj) { EXPECT_TRUE(mm::EnsureNeverFrozen(obj)); });
+    EXPECT_CALL(this->freezeHook(), Call(object.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field1.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field2.header()));
+    EXPECT_CALL(this->freezeHook(), Call(field3.header()));
+    EXPECT_THAT(mm::FreezeSubgraph(object.header()), field2.header());
+    EXPECT_FALSE(mm::IsFrozen(object.header()));
+    EXPECT_FALSE(mm::IsFrozen(field1.header()));
+    EXPECT_FALSE(mm::IsFrozen(field2.header()));
 }

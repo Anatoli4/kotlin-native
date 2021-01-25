@@ -46,12 +46,18 @@ bool mm::IsFrozen(const ObjHeader* object) noexcept {
 }
 
 ObjHeader* mm::FreezeSubgraph(ObjHeader* root) noexcept {
+    if (mm::IsFrozen(root)) return nullptr;
+
     std::vector<ObjHeader*> objects;
     std::vector<ObjHeader*> stack;
+    std::set<ObjHeader*> visited;
     stack.push_back(root);
     while (!stack.empty()) {
         ObjHeader* object = stack.back();
         stack.pop_back();
+        if (object == nullptr || mm::IsFrozen(object)) continue;
+        auto visitedResult = visited.insert(object);
+        if (!visitedResult.second) continue;
         objects.push_back(object);
         RunFreezeHooks(object);
         traverseObjectFields(object, [&stack](ObjHeader* field) noexcept { stack.push_back(field); });
