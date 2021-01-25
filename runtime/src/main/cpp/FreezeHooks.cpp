@@ -11,24 +11,9 @@
 
 using namespace kotlin;
 
-namespace {
-
-void (*g_hookOverrideForTesting)(ObjHeader*) = nullptr;
-
-} // namespace
-
 void kotlin::RunFreezeHooks(ObjHeader* object) noexcept {
-    if (g_hookOverrideForTesting != nullptr) {
-        g_hookOverrideForTesting(object);
-        return;
-    }
     // TODO: Consider some global registration.
-    auto* type = object->type_info();
-    if (type == theWorkerBoundReferenceTypeInfo) {
+    if (object->type_info() == theWorkerBoundReferenceTypeInfo) {
         WorkerBoundReferenceFreezeHook(object);
     }
-}
-
-void SetFreezeHookForTesting(void (*hook)(ObjHeader*)) noexcept {
-    g_hookOverrideForTesting = hook;
 }
