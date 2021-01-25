@@ -6,9 +6,30 @@
 #ifndef RUNTIME_MM_FREEZE_HOOKS_H
 #define RUNTIME_MM_FREEZE_HOOKS_H
 
+#include "Common.h"
+
 struct ObjHeader;
+struct TypeInfo;
 
 namespace kotlin {
+
+class FreezeHook {
+public:
+    using Hook = void(ObjHeader*);
+
+    FreezeHook(const TypeInfo* type, Hook* hook) noexcept;
+
+    const TypeInfo* type() const { return type_; }
+
+    void operator()(ObjHeader* object) noexcept { hook_(object); }
+
+private:
+    const TypeInfo* const type_;
+    Hook* const hook_;
+};
+
+#define INSTALL_FREEZE_HOOK(type, hook) \
+    static __attribute__((used)) kotlin::FreezeHook g_freezeHook##type(type, hook)
 
 // These hooks are only allowed to modify `object` subgraph.
 void RunFreezeHooks(ObjHeader* object) noexcept;

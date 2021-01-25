@@ -6,8 +6,12 @@
 #include "WorkerBoundReference.h"
 
 #include "Alloc.h"
+#include "FreezeHooks.hpp"
 #include "Memory.h"
 #include "MemorySharedRefs.hpp"
+
+// Defined in WorkerBoundReference.kt
+extern "C" void Kotlin_WorkerBoundReference_freezeHook(KRef thiz);
 
 namespace {
 
@@ -20,6 +24,8 @@ WorkerBoundReference* asWorkerBoundReference(KRef thiz) {
   return reinterpret_cast<WorkerBoundReference*>(thiz);
 }
 
+INSTALL_FREEZE_HOOK(theWorkerBoundReferenceTypeInfo, Kotlin_WorkerBoundReference_freezeHook);
+
 }  // namespace
 
 RUNTIME_NOTHROW void DisposeWorkerBoundReference(KRef thiz) {
@@ -29,13 +35,6 @@ RUNTIME_NOTHROW void DisposeWorkerBoundReference(KRef thiz) {
     holder->dispose();
     konanDestructInstance(holder);
   }
-}
-
-// Defined in WorkerBoundReference.kt
-extern "C" void Kotlin_WorkerBoundReference_freezeHook(KRef thiz);
-
-RUNTIME_NOTHROW void WorkerBoundReferenceFreezeHook(KRef thiz) {
-  Kotlin_WorkerBoundReference_freezeHook(thiz);
 }
 
 extern "C" {

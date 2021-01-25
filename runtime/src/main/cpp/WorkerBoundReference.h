@@ -11,6 +11,4 @@
 
 RUNTIME_NOTHROW void DisposeWorkerBoundReference(KRef thiz);
 
-RUNTIME_NOTHROW void WorkerBoundReferenceFreezeHook(KRef thiz);
-
 #endif  // RUNTIME_SHAREDREF_H

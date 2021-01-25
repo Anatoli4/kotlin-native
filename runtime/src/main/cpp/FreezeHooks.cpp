@@ -11,9 +11,22 @@
 
 using namespace kotlin;
 
+namespace {
+
+std::vector<FreezeHook*> g_hooks;
+
+}  // namespace
+
+kotlin::FreezeHook::FreezeHook(const TypeInfo* type, Hook* hook) noexcept : type_(type), hook_(hook) {
+    g_hooks.push_back(this);
+}
+
 void kotlin::RunFreezeHooks(ObjHeader* object) noexcept {
-    // TODO: Consider some global registration.
-    if (object->type_info() == theWorkerBoundReferenceTypeInfo) {
-        WorkerBoundReferenceFreezeHook(object);
+    auto* type = object->type_info();
+    for (FreezeHook* hook : g_hooks) {
+        if (hook->type() == type) {
+            (*hook)(object);
+            return;
+        }
     }
 }
