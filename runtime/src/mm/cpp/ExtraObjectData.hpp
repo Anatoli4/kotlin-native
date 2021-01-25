@@ -6,6 +6,7 @@
 #ifndef RUNTIME_MM_EXTRA_OBJECT_DATA_H
 #define RUNTIME_MM_EXTRA_OBJECT_DATA_H
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -38,7 +39,7 @@ public:
 
     ObjHeader** GetWeakCounterLocation() noexcept { return &weakReferenceCounter_; }
 
-    Flags& flags() noexcept { return flags_; }
+    std::atomic<Flags>& flags() noexcept { return flags_; }
 
 private:
     explicit ExtraObjectData(const TypeInfo* typeInfo) noexcept : typeInfo_(typeInfo) {}
@@ -47,7 +48,8 @@ private:
     // Must be first to match `TypeInfo` layout.
     const TypeInfo* typeInfo_;
 
-    Flags flags_ = FLAGS_NONE;
+    std::atomic<Flags> flags_ = FLAGS_NONE;
+    static_assert(std::atomic<Flags>::is_always_lock_free, "flags_ should use atomic operations");
 
 #ifdef KONAN_OBJC_INTEROP
     void* associatedObject_ = nullptr;
