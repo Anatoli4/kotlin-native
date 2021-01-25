@@ -11,9 +11,32 @@
 
 using namespace kotlin;
 
-void kotlin::RunFreezeHooks(ObjHeader* object) noexcept {
+namespace {
+
+void (*g_hookOverrideForTesting)(ObjHeader*) = nullptr;
+
+NO_INLINE void RunFreezeHooksImpl(ObjHeader* object, const TypeInfo* type) noexcept {
+    if (g_hookOverrideForTesting != nullptr) {
+        g_hookOverrideForTesting(object);
+        return;
+    }
     // TODO: Consider some global registration.
-    if (object->type_info() == theWorkerBoundReferenceTypeInfo) {
+    if (type == theWorkerBoundReferenceTypeInfo) {
         WorkerBoundReferenceFreezeHook(object);
     }
+}
+
+} // namespace
+
+void kotlin::RunFreezeHooks(ObjHeader* object) noexcept {
+    auto* type = object->type_info();
+    if ((type->flags_ & TF_HAS_FREEZE_HOOK) == 0) {
+        return;
+    }
+    // This is a cold path.
+    RunFreezeHooksImpl(object, type);
+}
+
+void kotlin::SetFreezeHookForTesting(void (*hook)(ObjHeader*)) noexcept {
+    g_hookOverrideForTesting = hook;
 }
