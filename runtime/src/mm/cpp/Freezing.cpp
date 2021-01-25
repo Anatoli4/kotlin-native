@@ -18,6 +18,7 @@ using namespace kotlin;
 
 namespace {
 
+// This is copied verbatim from legacy MM.
 // TODO: Come up with a better way to iterate object fields.
 template <typename func>
 inline void traverseObjectFields(ObjHeader* obj, func process) {
@@ -35,36 +36,44 @@ inline void traverseObjectFields(ObjHeader* obj, func process) {
     }
 }
 
-// `func` is called in a preorder fashion, and so is allowed to modify subgraph of the object passed to it.
-template <typename Func>
-void dfs(ObjHeader* root, Func func) noexcept {
-    std::deque<ObjHeader*> queue;
-    queue.push_back(root);
-    while (!queue.empty()) {
-        ObjHeader* object = queue.front();
-        queue.pop_front();
-        func(object);
-        traverseObjectFields(object, [&queue](ObjHeader* field) noexcept { queue.push_back(field); });
-    }
-}
-
 } // namespace
 
-ObjHeader* mm::FreezeSubgraph(ObjHeader* object) noexcept {
+bool mm::IsFrozen(const ObjHeader* object) noexcept {
+    if (auto* metaObject = object->GetMetaObjHeader()) {
+        return (mm::ExtraObjectData::FromMetaObjHeader(metaObject).flags() & mm::ExtraObjectData::FLAGS_FROZEN) != 0;
+    }
+    return false;
+}
+
+ObjHeader* mm::FreezeSubgraph(ObjHeader* root) noexcept {
     std::vector<ObjHeader*> objects;
-    dfs(object, [&objects](ObjHeader* object) noexcept {
+    std::vector<ObjHeader*> stack;
+    stack.push_back(root);
+    while (!stack.empty()) {
+        ObjHeader* object = stack.back();
+        stack.pop_back();
         objects.push_back(object);
         RunFreezeHooks(object);
-    });
+        traverseObjectFields(object, [&stack](ObjHeader* field) noexcept { stack.push_back(field); });
+    }
     for (auto* object : objects) {
         if (auto* metaObject = object->GetMetaObjHeader()) {
-            auto& extraObjectData = mm::ExtraObjectData::FromMetaObjHeader(metaObject);
-            if (!extraObjectData.CanBeFrozen()) return object;
+            auto& flags = mm::ExtraObjectData::FromMetaObjHeader(metaObject).flags();
+            if ((flags & mm::ExtraObjectData::FLAGS_NEVER_FROZEN) != 0) return object;
         }
     }
     for (auto* object : objects) {
-        auto& extraObjectData = mm::ExtraObjectData::FromMetaObjHeader(object->meta_object());
-        extraObjectData.Freeze();
+        auto& flags = mm::ExtraObjectData::FromMetaObjHeader(object->meta_object()).flags();
+        flags = static_cast<mm::ExtraObjectData::Flags>(flags | mm::ExtraObjectData::FLAGS_FROZEN);
     }
     return nullptr;
+}
+
+bool mm::EnsureNeverFrozen(ObjHeader* object) noexcept {
+    auto& flags = mm::ExtraObjectData::FromMetaObjHeader(object->meta_object()).flags();
+    if ((flags & mm::ExtraObjectData::FLAGS_FROZEN) != 0) {
+        return false;
+    }
+    flags = static_cast<mm::ExtraObjectData::Flags>(flags | mm::ExtraObjectData::FLAGS_NEVER_FROZEN);
+    return true;
 }

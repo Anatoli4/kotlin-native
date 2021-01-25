@@ -20,6 +20,12 @@ namespace mm {
 // Optional data that's lazily allocated only for objects that need it.
 class ExtraObjectData : private Pinned, public KonanAllocatorAware {
 public:
+    enum Flags : uint32_t {
+        FLAGS_NONE = 0,
+        FLAGS_FROZEN = 1 << 0,
+        FLAGS_NEVER_FROZEN = 1 << 1,
+    };
+
     MetaObjHeader* AsMetaObjHeader() noexcept { return reinterpret_cast<MetaObjHeader*>(this); }
     static ExtraObjectData& FromMetaObjHeader(MetaObjHeader* header) noexcept { return *reinterpret_cast<ExtraObjectData*>(header); }
 
@@ -32,11 +38,7 @@ public:
 
     ObjHeader** GetWeakCounterLocation() noexcept { return &weakReferenceCounter_; }
 
-    bool IsFrozen() const noexcept;
-    bool CanBeFrozen() const noexcept;
-
-    void Freeze() noexcept;
-    void EnsureNeverFrozen() noexcept;
+    Flags& flags() noexcept { return flags_; }
 
 private:
     explicit ExtraObjectData(const TypeInfo* typeInfo) noexcept : typeInfo_(typeInfo) {}
@@ -44,12 +46,6 @@ private:
 
     // Must be first to match `TypeInfo` layout.
     const TypeInfo* typeInfo_;
-
-    enum Flags : uint32_t {
-        FLAGS_NONE = 0,
-        FLAGS_FROZEN = 1 << 0,
-        FLAGS_NEVER_FROZEN = 1 << 1,
-    };
 
     Flags flags_ = FLAGS_NONE;
 

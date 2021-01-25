@@ -12,6 +12,7 @@
 using namespace kotlin;
 
 void kotlin::RunFreezeHooks(ObjHeader* object) noexcept {
+    // TODO: Consider some global registration.
     if (object->type_info() == theWorkerBoundReferenceTypeInfo) {
         WorkerBoundReferenceFreezeHook(object);
     }

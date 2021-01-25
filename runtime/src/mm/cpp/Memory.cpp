@@ -94,10 +94,7 @@ void ObjHeader::destroyMetaObject(ObjHeader* object) {
 }
 
 ALWAYS_INLINE bool isFrozen(const ObjHeader* obj) {
-    if (auto* metaObject = obj->GetMetaObjHeader()) {
-        return mm::ExtraObjectData::FromMetaObjHeader(metaObject).IsFrozen();
-    }
-    return false;
+    return mm::IsFrozen(obj);
 }
 
 ALWAYS_INLINE bool isPermanentOrFrozen(const ObjHeader* obj) {
@@ -253,11 +250,9 @@ extern "C" void FreezeSubgraph(ObjHeader* obj) {
 }
 
 extern "C" void EnsureNeverFrozen(ObjHeader* obj) {
-    auto& extraObjectData = mm::ExtraObjectData::FromMetaObjHeader(obj->meta_object());
-    if (extraObjectData.IsFrozen()) {
+    if (!mm::EnsureNeverFrozen(obj)) {
         ThrowFreezingException(obj, obj);
     }
-    extraObjectData.EnsureNeverFrozen();
 }
 
 extern "C" ForeignRefContext InitForeignRef(ObjHeader* object) {

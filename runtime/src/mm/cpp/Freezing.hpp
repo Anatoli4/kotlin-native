@@ -11,10 +11,17 @@ struct ObjHeader;
 namespace kotlin {
 namespace mm {
 
-// If some object in the `object` subgraph was marked with `EnsureNeverFrozen` only
-// freeze hooks would've been executed. On success, returns `nullptr`.
+bool IsFrozen(const ObjHeader* object) noexcept;
+
+// If some object in the `root` subgraph is marked with `EnsureNeverFrozen` only
+// freeze hooks will be executed, and the offending object will be return. Otherwise,
+// all objects in the subgraph will be frozen and `nullptr` will be returned.
 // Note: not thread safe.
-ObjHeader* FreezeSubgraph(ObjHeader* object) noexcept;
+ObjHeader* FreezeSubgraph(ObjHeader* root) noexcept;
+
+// If `object` is already frozen returns false.
+// Note: not thread safe.
+bool EnsureNeverFrozen(ObjHeader* object) noexcept;
 
 } // namespace mm
 } // namespace kotlin
