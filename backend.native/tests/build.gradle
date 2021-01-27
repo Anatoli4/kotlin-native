@@ -153,6 +153,8 @@ tasks.withType(RunExternalTestGroup.class).configureEach {
     enableTwoStageCompilation = twoStageEnabled
 }
 
+final boolean isExperimentalMM = project.globalTestArgs.contains("-memory-model") && project.globalTestArgs.contains("experimental")
+
 allprojects {
     // Root directories for test output (logs, compiled files, statistics etc). Only single path must be in each set.
     // backend.native/tests
