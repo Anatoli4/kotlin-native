@@ -91,6 +91,7 @@ class ClangArgs(private val configurables: Configurables) : Configurables by con
 
         // Here we workaround Clang 8 limitation: macOS major version should be 10.
         // So we compile runtime with version 10.16 and then override version in BitcodeCompiler.
+        // TODO: Fix with LLVM Update.
         KonanTarget.MACOS_ARM64 -> listOf(
                 "-arch", "arm64",
                 "-mmacosx-version-min=10.16"
