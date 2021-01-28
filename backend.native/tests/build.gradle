@@ -4068,6 +4068,13 @@ interopTest("interop_kt43265") {
     source = "interop/kt43265/usage.kt"
 }
 
+dynamicTest("interop_kt43502") {
+    disabled = project.testTarget == 'linux_x64'
+    dependsOnPlatformLibs(it)
+    cSource = "$projectDir/interop/kt43502/main.c"
+    source = "interop/kt43502/main.kt"
+}
+
 interopTest("interop_leakMemoryWithRunningThreadUnchecked") {
     disabled = (project.testTarget == 'wasm32') // No interop for wasm yet.
     interop = 'leakMemoryWithRunningThread'
